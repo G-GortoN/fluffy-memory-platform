@@ -1,0 +1,10 @@
+.DS_Store
+/.local/
+**/.env
+**/.env.local
+**/.env.*.local
+**/target/
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+**/*.log

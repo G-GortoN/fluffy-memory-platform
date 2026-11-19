@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: fluffy-memory
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/fluffy_memory}
+    username: ${DATABASE_USERNAME:fluffy_memory}
+    password: ${DATABASE_PASSWORD:}
+    hikari:
+      maximum-pool-size: 8
+  jackson:
+    deserialization:
+      accept-float-as-int: false
+  servlet:
+    multipart:
+      max-file-size: 8MB
+      max-request-size: 9MB
+server:
+  port: ${PORT:8080}
+  forward-headers-strategy: native
+  servlet:
+    session:
+      timeout: 45m
+      cookie:
+        name: FLUFFY_SESSION
+        http-only: true
+        secure: ${APP_COOKIE_SECURE:true}
+        same-site: lax
+  error:
+    include-message: never
+    include-stacktrace: never
+app:
+  admin-email: ${APP_ADMIN_EMAIL:}
+  admin-password: ${APP_ADMIN_PASSWORD:}
+  media-directory: ${APP_MEDIA_DIRECTORY:./.local/media}
+  simulated-payments: ${APP_SIMULATED_PAYMENTS:false}
+springdoc:
+  swagger-ui:
+    enabled: ${APP_API_DOCS:false}
+    path: /api/docs
+  api-docs:
+    enabled: ${APP_API_DOCS:false}
+    path: /api/openapi

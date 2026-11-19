@@ -1,0 +1,10 @@
+.git
+.local
+**/.DS_Store
+**/.env
+**/.env.local
+**/.env.*.local
+**/target
+**/node_modules
+**/dist
+**/*.log

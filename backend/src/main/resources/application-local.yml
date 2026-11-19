@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://127.0.0.1:55443/fluffy_memory}
+server:
+  address: ${APP_BIND_ADDRESS:127.0.0.1}
+  port: ${PORT:8093}
+  servlet:
+    session:
+      cookie:
+        secure: false
+app:
+  simulated-payments: ${APP_SIMULATED_PAYMENTS:true}
+springdoc:
+  api-docs:
+    enabled: true
