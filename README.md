@@ -40,6 +40,8 @@ Vite 显示本地访问地址，默认将 `/api` 代理到 `http://127.0.0.1:809
 
 GitHub Actions 运行 Maven 验证、前端构建和 Compose 冒烟检查。真实收款前需要接入支付渠道并完成付款、退款和对账验收。样例商品、实物寄样及线下告别服务按[首期实施方案](implementation-plan.zh-CN.md)管理。首次正式发布前，通过商品后台核对样例商品的上架状态。
 
+NAS 通过 [容器部署手册](deploy/nas.zh-CN.md)加载主分支构建的 `linux/amd64` 镜像，由宿主机 HTTPS 入口转发至独立的回环端口。
+
 项目使用 Java 21、Spring Boot 4、Spring Security、JDBC、PostgreSQL 17 和 Flyway。前端使用 React 19、TypeScript、Vite 8、React Router、TanStack Query 和 Ant Design 6。
 
 ## 演示图像

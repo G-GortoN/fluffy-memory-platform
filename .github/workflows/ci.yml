@@ -56,9 +56,58 @@ jobs:
           curl --fail --silent http://127.0.0.1:8087/ | grep 'Fluffy Memory'
           curl --fail --silent http://127.0.0.1:8087/shop | grep 'Fluffy Memory'
           python3 deploy/smoke.py --base-url http://127.0.0.1:8087
+      - name: Verify NAS deployment and package its images
+        run: |
+          export DATABASE_PASSWORD="$(openssl rand -hex 24)"
+          export APP_ADMIN_EMAIL=admin@example.test
+          export APP_ADMIN_PASSWORD="$(openssl rand -hex 24)"
+          export API_IMAGE="fluffy-memory-api:${GITHUB_SHA}"
+          export WEB_IMAGE="fluffy-memory-web:${GITHUB_SHA}"
+          TAILSCALE_IMAGE=tailscale/tailscale:stable docker compose \
+            -f deploy/compose.nas.yml -f deploy/compose.nas-funnel.yml config --quiet
+          for service in api web; do
+            image_id="$(docker compose -f deploy/compose.yml images -q "$service")"
+            test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image_id")" = linux/amd64
+            docker image tag "$image_id" "fluffy-memory-${service}:${GITHUB_SHA}"
+          done
+          docker compose -f deploy/compose.nas.yml up -d --no-build --wait --wait-timeout 120
+          test "$(curl -fsS http://127.0.0.1:18082/healthz)" = ok
+          curl -fsS http://127.0.0.1:18082/api/products |
+            python3 -c 'import json,sys; products=json.load(sys.stdin); assert isinstance(products, list) and products'
+          curl -fsS -D "${RUNNER_TEMP}/fluffy-memory-headers" -o /dev/null http://127.0.0.1:18082/api/auth/csrf
+          for attribute in Secure HttpOnly SameSite=Lax; do
+            grep -Eqi "^Set-Cookie: FLUFFY_SESSION=.*; ${attribute}(;|[[:space:]]*$)" "${RUNNER_TEMP}/fluffy-memory-headers"
+          done
+          docker compose -f deploy/compose.nas.yml exec -T api sh -ec 'test "$(id -u)" = 10001; touch /app/media/.ci-check; rm /app/media/.ci-check'
+          docker compose -f deploy/compose.nas.yml exec -T web sh -ec 'test "$(id -u)" = 10001'
+
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then
+            release_dir="${RUNNER_TEMP}/fluffy-memory-release"
+            mkdir -p "$release_dir"
+            docker image save "$API_IMAGE" "$WEB_IMAGE" | gzip -1 > "$release_dir/fluffy-memory-images.tar.gz"
+            printf 'API_IMAGE=%s\nWEB_IMAGE=%s\n' "$API_IMAGE" "$WEB_IMAGE" > "$release_dir/images.env"
+            (cd "$release_dir" && sha256sum fluffy-memory-images.tar.gz images.env > SHA256SUMS)
+          fi
+      - name: Upload private NAS image package
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: nas-linux-amd64-${{ github.sha }}
+          path: ${{ runner.temp }}/fluffy-memory-release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
       - name: Collect service logs
         if: failure()
-        run: DATABASE_PASSWORD=unused docker compose -f deploy/compose.yml logs --no-color
+        run: |
+          DATABASE_PASSWORD=unused docker compose -f deploy/compose.yml logs --no-color
+          DATABASE_PASSWORD=unused APP_ADMIN_EMAIL=admin@example.test APP_ADMIN_PASSWORD=unused \
+            API_IMAGE="fluffy-memory-api:${GITHUB_SHA}" WEB_IMAGE="fluffy-memory-web:${GITHUB_SHA}" docker compose \
+            -f deploy/compose.nas.yml logs --no-color
       - name: Remove temporary containers
         if: always()
-        run: DATABASE_PASSWORD=unused docker compose -f deploy/compose.yml down --volumes
+        run: |
+          DATABASE_PASSWORD=unused docker compose -f deploy/compose.yml down --volumes
+          DATABASE_PASSWORD=unused APP_ADMIN_EMAIL=admin@example.test APP_ADMIN_PASSWORD=unused \
+            API_IMAGE="fluffy-memory-api:${GITHUB_SHA}" WEB_IMAGE="fluffy-memory-web:${GITHUB_SHA}" docker compose \
+            -f deploy/compose.nas.yml down --volumes

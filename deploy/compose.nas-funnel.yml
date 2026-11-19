@@ -1,0 +1,26 @@
+services:
+  funnel:
+    image: ${TAILSCALE_IMAGE:?Set TAILSCALE_IMAGE to a verified Tailscale image tag or digest}
+    network_mode: service:web
+    entrypoint:
+      - /usr/local/bin/tailscaled
+    command:
+      - --tun=userspace-networking
+      - --statedir=/var/lib/tailscale
+      - --socket=/var/run/tailscale/tailscaled.sock
+    volumes:
+      - funnel_state:/var/lib/tailscale
+    tmpfs:
+      - /var/run/tailscale:size=4m,mode=0755
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      web:
+        condition: service_healthy
+        restart: true
+    restart: unless-stopped
+
+volumes:
+  funnel_state:

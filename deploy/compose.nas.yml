@@ -1,0 +1,76 @@
+name: fluffy-memory-nas
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
+
+services:
+  db:
+    image: ${DB_IMAGE:-postgres:17-alpine}
+    environment:
+      POSTGRES_DB: fluffy_memory
+      POSTGRES_USER: fluffy_memory
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD in the NAS environment file}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U fluffy_memory -d fluffy_memory']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: *logging
+
+  api:
+    image: ${API_IMAGE:?Load the release images and pass its images.env}
+    pull_policy: never
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/fluffy_memory
+      DATABASE_USERNAME: fluffy_memory
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD in the NAS environment file}
+      APP_ADMIN_EMAIL: ${APP_ADMIN_EMAIL:?Set APP_ADMIN_EMAIL in the NAS environment file}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:?Set APP_ADMIN_PASSWORD in the NAS environment file}
+      APP_COOKIE_SECURE: 'true'
+      APP_SIMULATED_PAYMENTS: ${APP_SIMULATED_PAYMENTS:?Set APP_SIMULATED_PAYMENTS explicitly}
+      APP_API_DOCS: 'false'
+    volumes:
+      - media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 30s
+    restart: unless-stopped
+    logging: *logging
+
+  web:
+    image: ${WEB_IMAGE:?Load the release images and pass its images.env}
+    pull_policy: never
+    ports:
+      - '127.0.0.1:18082:8080'
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /data:size=16m,mode=1777
+      - /config:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  database:
+  media:
