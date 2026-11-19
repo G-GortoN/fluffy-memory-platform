@@ -57,6 +57,7 @@ jobs:
           curl --fail --silent http://127.0.0.1:8087/shop | grep 'Fluffy Memory'
           python3 deploy/smoke.py --base-url http://127.0.0.1:8087
       - name: Verify NAS deployment and package its images
+        shell: bash
         run: |
           export DATABASE_PASSWORD="$(openssl rand -hex 24)"
           export APP_ADMIN_EMAIL=admin@example.test
@@ -71,12 +72,18 @@ jobs:
             docker image tag "$image_id" "fluffy-memory-${service}:${GITHUB_SHA}"
           done
           docker compose -f deploy/compose.nas.yml up -d --no-build --wait --wait-timeout 120
-          test "$(curl -fsS http://127.0.0.1:18082/healthz)" = ok
+          if [ "$(curl -fsS http://127.0.0.1:18082/healthz)" != ok ]; then
+            echo '::error::NAS web health endpoint did not return ok'
+            exit 1
+          fi
           curl -fsS http://127.0.0.1:18082/api/products |
             python3 -c 'import json,sys; products=json.load(sys.stdin); assert isinstance(products, list) and products'
           curl -fsS -D "${RUNNER_TEMP}/fluffy-memory-headers" -o /dev/null http://127.0.0.1:18082/api/auth/csrf
           for attribute in Secure HttpOnly SameSite=Lax; do
-            grep -Eqi "^Set-Cookie: FLUFFY_SESSION=.*; ${attribute}(;|[[:space:]]*$)" "${RUNNER_TEMP}/fluffy-memory-headers"
+            if ! grep -Eqi "^Set-Cookie: FLUFFY_SESSION=.*; ${attribute}(;|[[:space:]]*$)" "${RUNNER_TEMP}/fluffy-memory-headers"; then
+              echo "::error::NAS session cookie is missing ${attribute}"
+              exit 1
+            fi
           done
           docker compose -f deploy/compose.nas.yml exec -T api sh -ec 'test "$(id -u)" = 10001; touch /app/media/.ci-check; rm /app/media/.ci-check'
           docker compose -f deploy/compose.nas.yml exec -T web sh -ec 'test "$(id -u)" = 10001'
