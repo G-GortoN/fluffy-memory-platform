@@ -51,6 +51,10 @@ h3 { line-height: 1.36; }
 .nav-account:hover, .nav-bag:hover { background: var(--sage); }
 .nav-account span:not(.anticon) { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .nav-bag .anticon, .nav-account > .anticon:first-child { font-size: 20px; }
+.nav-language { display: inline-flex; min-height: 42px; min-width: 42px; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 999px; padding: 0 9px; background: transparent; color: var(--ink); font: inherit; font-size: 13px; }
+.nav-language:hover { background: var(--sage); }
+.nav-language .anticon { font-size: 17px; }
+.shared-language { width: var(--content); margin: 12px auto 0; display: flex; justify-content: flex-end; }
 .nav-chevron { font-size: 11px; }
 .nav-error { width: var(--content); margin: 0 auto 12px; }
 .site-footer { margin-top: 56px; padding: 28px 0; background: #f0f0e6; border-top: 1px solid var(--line); }
@@ -262,6 +266,7 @@ h3 { line-height: 1.36; }
 }
 
 @media (max-width: 510px) {
+  .nav-language { padding-inline: 5px; }
   :root { --content: min(100% - 28px, 1320px); }
   .home-shell { padding-top: 14px; }
   .hero { display: flex; flex-direction: column; align-items: stretch; min-height: 0; border-radius: 17px; }
