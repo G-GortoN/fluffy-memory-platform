@@ -67,13 +67,22 @@ def verify(base_url):
     guest.request(f'/api/shared/{token}', expected=404)
 
     line = customer.request('/api/cart', 'POST', {'variantId': variant['id'], 'quantity': 1}, expected=201)
+    quote = customer.request('/api/orders/quote', 'POST', {'cartIds': [line['id']]})
+    assert quote['subtotalCents'] == variant['priceCents']
+    assert quote['totalCents'] == quote['subtotalCents'] + quote['shippingCents']
+    assert customer.request('/api/cart')[0]['id'] == line['id'], 'Quoting must keep the cart intact'
+    before_checkout = guest.request(f'/api/products/{bowl["id"]}')
+    assert next(item['stock'] for item in before_checkout['variants'] if item['id'] == variant['id']) == variant['stock']
     checkout = {
         'cartIds': [line['id']], 'recipient': '演示收件人', 'phone': '13800000000',
         'address': '测试地址，自动化验收专用', 'requestId': str(uuid.uuid4()),
+        'expectedTotalCents': quote['totalCents'],
     }
+    stale_checkout = {**checkout, 'expectedTotalCents': quote['totalCents'] + 1}
+    customer.request('/api/orders', 'POST', stale_checkout, expected=409)
     order = customer.request('/api/orders', 'POST', checkout, expected=201)
     assert order['status'] == 'PENDING_PAYMENT'
-    assert order['subtotalCents'] == variant['priceCents']
+    assert all(order[key] == quote[key] for key in ('subtotalCents', 'shippingCents', 'totalCents'))
     assert customer.request('/api/orders', 'POST', checkout, expected=201)['id'] == order['id']
     order_path = f'/api/orders/{order["id"]}'
     assert customer.request(order_path + '/pay', 'POST')['status'] == 'PAID'

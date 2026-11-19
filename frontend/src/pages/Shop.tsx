@@ -6,7 +6,7 @@ import { SearchOutlined, ShoppingOutlined } from '@ant-design/icons';
 import { api, ApiError } from '../api';
 import { loginLink, useSession } from '../auth';
 import { cartKey } from '../queries';
-import { categoryNames, type Category, type CartItem, type Product, type PurchaseItem } from '../types';
+import { categoryNames, type Category, type CartItem, type DirectCheckout, type Product, type PurchaseItem } from '../types';
 import { ButtonLink, EmptyState, Feedback, formatPrice, Loading, MediaImage, PageIntro, PhotoInput } from '../ui';
 
 const memoriesCategories: Category[] = ['FRAMES', 'KEEPSAKES', 'URNS'];
@@ -87,14 +87,17 @@ function ProductPurchase({ product }: { product: Product }) {
   const available = product.active && selected && selected.stock >= quantity;
   const customReady = !product.custom || Boolean(customText.trim() || customPhotoUrl);
   function select(mode: 'cart' | 'direct') {
-    if (!selected || !available || !customReady) return;
+    if (!account || !selected || !available || !customReady) return;
     const item: PurchaseItem = { variantId: selected.id, quantity };
     if (product.custom) {
       item.customText = customText.trim();
       item.customPhotoUrl = customPhotoUrl;
     }
     if (mode === 'cart') add.mutate(item);
-    else navigate('/checkout', { state: { item, productName: product.name, variantName: selected.name, priceCents: selected.priceCents } });
+    else {
+      const checkout: DirectCheckout = { accountId: account.id, item, productName: product.name, variantName: selected.name };
+      navigate('/checkout', { state: checkout });
+    }
   }
   return <main className="page-shell">
     <Link className="back-link" to="/shop">返回商城</Link>
@@ -121,6 +124,12 @@ function ProductPurchase({ product }: { product: Product }) {
           <Button disabled={!available || !customReady || uploading || add.isPending} onClick={() => select('direct')}>立即购买</Button>
           {added && <Link className="text-link" to="/cart">查看购物袋</Link>}
         </div> : <ButtonLink to={loginLink(location.pathname)}>登录后购买</ButtonLink>}
+        <dl className="purchase-policy">
+          <dt>参考发货时间</dt>
+          <dd>{product.custom ? '付款后开始排单制作，参考发货时间为 3–7 个工作日。' : '付款后参考发货时间为 1–3 个工作日。'}实际进度可在订单中查看。</dd>
+          <dt>取消与退款</dt>
+          <dd>{product.custom ? '待付款订单可取消。付款后可申请退款，运营将核对制作和发货进度。' : '待付款订单可取消。付款后可在订单详情中提交退款申请，由运营审核。'}</dd>
+        </dl>
       </section>
     </div>
   </main>;

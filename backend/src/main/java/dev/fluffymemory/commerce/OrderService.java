@@ -26,6 +26,7 @@ import static dev.fluffymemory.commerce.CommerceRules.*;
 
 @Service
 class OrderService {
+    private static final int SHIPPING_CENTS = 0;
     private static final Set<Status> REFUNDABLE = Set.of(Status.PAID, Status.PARTIALLY_SHIPPED, Status.SHIPPED, Status.COMPLETED);
     private static final Set<Status> FULFILLABLE = Set.of(Status.PAID, Status.PARTIALLY_SHIPPED);
 
@@ -59,6 +60,11 @@ class OrderService {
         return getDetails(find(ownerId, orderId, false));
     }
 
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    CheckoutQuote quote(long ownerId, CheckoutInput request) {
+        return prepareCheckout(ownerId, request, false).quote();
+    }
+
     @Transactional
     Order checkout(long ownerId, CheckoutInput request) {
         String requestId = requiredText(request.requestId(), 100, "结算标识");
@@ -72,32 +78,54 @@ class OrderService {
         String recipient = requiredText(request.recipient(), 60, "收货人姓名");
         String phone = requiredText(request.phone(), 32, "联系电话");
         String address = requiredText(request.address(), 300, "收货地址");
-        CheckoutLines selection = selectLines(ownerId, request);
-        List<LineInput> lines = selection.items();
-        Set<Long> variantIds = lines.stream().map(cart::validVariantId).collect(Collectors.toSet());
-        Map<Long, CatalogService.SellableVariant> variants = catalog.lockVariants(variantIds);
-        List<LineInput> validated = lines.stream()
-            .map(line -> cart.normalizeLine(ownerId, line, variants.get(line.variantId()))).toList();
-        reserveStock(validated, variants);
+        CheckoutPlan plan = prepareCheckout(ownerId, request, true);
+        if (request.expectedTotalCents() != null && request.expectedTotalCents() != plan.quote().totalCents()) {
+            throw ApiException.conflict("结算金额已变化，请刷新价格并重新确认");
+        }
+        reserveStock(plan.quantities());
 
-        long subtotal = validated.stream().mapToLong(line -> (long) variants.get(line.variantId()).priceCents() * line.quantity()).sum();
         long orderId = db.sql("""
             insert into orders (account_id, request_id, status, subtotal_cents, shipping_cents,
                                 recipient, phone, address, expires_at)
-            values (:owner, :request, 'PENDING_PAYMENT', :subtotal, 0, :recipient, :phone, :address,
+            values (:owner, :request, 'PENDING_PAYMENT', :subtotal, :shipping, :recipient, :phone, :address,
                     clock_timestamp() + interval '30 minutes') returning id
-            """).param("owner", ownerId).param("request", requestId).param("subtotal", subtotal)
+            """).param("owner", ownerId).param("request", requestId)
+            .param("subtotal", plan.quote().subtotalCents()).param("shipping", plan.quote().shippingCents())
             .param("recipient", recipient).param("phone", phone).param("address", address)
             .query(Long.class).single();
 
-        for (LineInput line : validated) {
-            saveItem(ownerId, orderId, line, variants.get(line.variantId()));
+        for (PricedLine line : plan.lines()) {
+            saveItem(ownerId, orderId, line.input(), line.variant());
         }
-        if (!selection.cartIds().isEmpty()) {
+        if (!plan.cartIds().isEmpty()) {
             db.sql("delete from cart_items where account_id = :owner and id in (:ids)")
-                .param("owner", ownerId).param("ids", selection.cartIds()).update();
+                .param("owner", ownerId).param("ids", plan.cartIds()).update();
         }
         return getDetails(find(ownerId, orderId, false));
+    }
+
+    private CheckoutPlan prepareCheckout(long ownerId, CheckoutInput request, boolean lockStock) {
+        CheckoutLines selection = selectLines(ownerId, request);
+        Set<Long> variantIds = selection.items().stream().map(cart::validVariantId).collect(Collectors.toSet());
+        Map<Long, CatalogService.SellableVariant> variants = catalog.checkoutVariants(variantIds, lockStock);
+        List<PricedLine> lines = new ArrayList<>();
+        Map<Long, Integer> quantities = new TreeMap<>();
+        long subtotal = 0;
+        for (LineInput input : selection.items()) {
+            var variant = variants.get(input.variantId());
+            LineInput line = cart.normalizeLine(ownerId, input, variant);
+            lines.add(new PricedLine(line, variant));
+            quantities.merge(variant.id(), line.quantity(), Integer::sum);
+            subtotal += (long) variant.priceCents() * line.quantity();
+        }
+        for (var entry : quantities.entrySet()) {
+            var variant = variants.get(entry.getKey());
+            if (entry.getValue() > variant.stock()) {
+                throw ApiException.conflict(variant.productName() + "库存不足，可购买 " + variant.stock() + " 件");
+            }
+        }
+        var quote = new CheckoutQuote(subtotal, SHIPPING_CENTS, subtotal + SHIPPING_CENTS);
+        return new CheckoutPlan(lines, selection.cartIds(), quantities, quote);
     }
 
     private CheckoutLines selectLines(long ownerId, CheckoutInput request) {
@@ -122,19 +150,10 @@ class OrderService {
             selected.stream().map(CartItem::id).toList());
     }
 
-    private void reserveStock(List<LineInput> lines, Map<Long, CatalogService.SellableVariant> variants) {
-        Map<Long, Integer> quantities = new TreeMap<>();
-        for (LineInput line : lines) {
-            quantities.merge(line.variantId(), line.quantity(), Integer::sum);
-        }
+    private void reserveStock(Map<Long, Integer> quantities) {
         for (var entry : quantities.entrySet()) {
-            var variant = variants.get(entry.getKey());
-            int quantity = entry.getValue();
-            if (quantity > variant.stock()) {
-                throw ApiException.conflict(variant.productName() + "库存不足，可购买 " + variant.stock() + " 件");
-            }
             db.sql("update product_variants set stock = stock - :quantity where id = :id")
-                .param("quantity", quantity).param("id", variant.id()).update();
+                .param("quantity", entry.getValue()).param("id", entry.getKey()).update();
         }
     }
 
@@ -420,6 +439,9 @@ class OrderService {
     }
 
     private record CheckoutLines(List<LineInput> items, List<Long> cartIds) {}
+    private record PricedLine(LineInput input, CatalogService.SellableVariant variant) {}
+    private record CheckoutPlan(List<PricedLine> lines, List<Long> cartIds, Map<Long, Integer> quantities,
+                                CheckoutQuote quote) {}
     private record StockReturn(long variantId, int quantity) {}
     private record OrderItemRow(long orderId, OrderItem item) {}
     private record ShipmentRow(long orderId, Shipment shipment) {}

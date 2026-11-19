@@ -77,6 +77,11 @@ class CommerceController {
         return orders.get(accountId(principal), id);
     }
 
+    @PostMapping("/orders/quote")
+    CheckoutQuote quote(Principal principal, @RequestBody CheckoutInput input) {
+        return orders.quote(accountId(principal), input);
+    }
+
     @PostMapping("/orders")
     @ResponseStatus(HttpStatus.CREATED)
     Order checkout(Principal principal, @RequestBody CheckoutInput input) {

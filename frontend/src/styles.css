@@ -195,6 +195,9 @@ h3 { line-height: 1.36; }
 .purchase-quantity, .quantity-stepper, .order-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .purchase-quantity > span { color: var(--muted); font-size: 14px; }
 .purchase-actions { margin-top: 22px; }
+.purchase-policy { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 14px; border-top: 1px solid var(--line); margin: 24px 0 0; padding-top: 16px; font-size: 14px; }
+.purchase-policy dt { font-weight: 650; }
+.purchase-policy dd { margin: 0; color: var(--muted); }
 .checkout-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); align-items: start; gap: 20px; }
 .cart-row, .admin-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; min-width: 0; }
 .cart-row + .cart-row, .admin-row + .admin-row { border-top: 1px solid var(--line); }

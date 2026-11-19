@@ -3,8 +3,9 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Checkbox, Form, Input, Modal, Popconfirm, Tag } from 'antd';
 import { DeleteOutlined, MinusOutlined, PlusOutlined } from '@ant-design/icons';
-import { api } from '../api';
-import { orderStatusNames, type CartItem, type Order, type OrderItem, type PurchaseItem } from '../types';
+import { ApiError, api } from '../api';
+import { sessionKey, useSession } from '../auth';
+import { orderStatusNames, type CartItem, type DirectCheckout, type Order, type OrderItem } from '../types';
 import { ButtonLink, EmptyState, Feedback, formatDate, formatPrice, Loading, MediaImage, PageIntro } from '../ui';
 import { cartKey } from '../queries';
 
@@ -56,24 +57,47 @@ export function Cart() {
   </main>;
 }
 
-type DirectOrder = { item: PurchaseItem; productName: string; variantName: string; priceCents: number };
 type Address = { recipient: string; phone: string; address: string };
+type Quote = Pick<Order, 'subtotalCents' | 'shippingCents' | 'totalCents'>;
 
 export function Checkout() {
   const location = useLocation();
   const navigate = useNavigate();
   const client = useQueryClient();
-  const direct = location.state as DirectOrder | null;
+  const { data: account } = useSession();
+  const directState = location.state as DirectCheckout | null;
+  const direct = account && directState?.accountId === account.id ? directState : null;
   const cartIds = new URLSearchParams(location.search).get('cart')?.split(',').map(Number).filter(id => Number.isSafeInteger(id) && id > 0) ?? [];
   const result = useCart(!direct?.item && !!cartIds.length);
   const cartItems = result.data?.filter(item => cartIds.includes(item.id)) ?? [];
-  const lines = direct?.item ? [{ ...direct.item, productName: direct.productName, variantName: direct.variantName, priceCents: direct.priceCents }] : cartItems;
-  const requestId = useRef<string | undefined>(undefined);
-  const subtotal = lines.reduce((sum, item) => sum + item.priceCents * item.quantity, 0);
+  const lines = direct?.item ? [{ ...direct.item, productName: direct.productName, variantName: direct.variantName }] : cartItems;
+  const source = direct?.item ? { items: [direct.item] } : { cartIds };
+  const hasSelection = !!direct?.item || (cartIds.length > 0 && cartItems.length === cartIds.length);
+  // Requote if a cart row changes while this tab is open, even if its ID stays the same.
+  const quoteKey = ['checkout-quote', account?.id, location.key, source, cartItems.map(item => [item.id, item.quantity, item.priceCents])] as const;
+  const quote = useQuery({
+    queryKey: quoteKey,
+    queryFn: async () => {
+      try {
+        return await api<Quote>('/orders/quote', 'POST', source);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) void client.invalidateQueries({ queryKey: sessionKey });
+        throw error;
+      }
+    },
+    enabled: Boolean(account && hasSelection),
+    refetchOnMount: 'always',
+  });
+  const quoted = quote.isSuccess && !quote.isFetching;
+  const request = useRef<{ locationKey: string; id: string } | null>(null);
   const place = useMutation({
-    mutationFn: (address: Address) => {
-      requestId.current ??= crypto.randomUUID();
-      return api<Order>('/orders', 'POST', { ...address, requestId: requestId.current, ...(direct?.item ? { items: [direct.item] } : { cartIds: cartItems.map(item => item.id) }) });
+    mutationFn: ({ address, expectedTotalCents }: { address: Address; expectedTotalCents: number }) => {
+      if (request.current?.locationKey !== location.key) request.current = { locationKey: location.key, id: crypto.randomUUID() };
+      return api<Order>('/orders', 'POST', { ...source, ...address, requestId: request.current.id, expectedTotalCents });
+    },
+    onError: error => {
+      if (error instanceof ApiError && error.status === 409) void client.invalidateQueries({ queryKey: quoteKey });
+      if (error instanceof ApiError && error.status === 401) void client.invalidateQueries({ queryKey: sessionKey });
     },
     onSuccess: order => {
       void client.invalidateQueries({ queryKey: cartKey });
@@ -82,17 +106,19 @@ export function Checkout() {
     },
   });
   if (result.isLoading) return <main className="page-shell"><Loading /></main>;
-  if (!direct?.item && result.error) return <main className="page-shell"><Feedback error={result.error} /></main>;
-  if (!lines.length || (!direct?.item && cartItems.length !== cartIds.length)) return <main className="page-shell"><EmptyState title="找不到待结算的商品"><ButtonLink to="/cart">返回购物袋</ButtonLink></EmptyState></main>;
+  if (!direct?.item && cartIds.length && result.error) return <main className="page-shell"><Feedback error={result.error} /></main>;
+  if (!hasSelection) return <main className="page-shell"><EmptyState title="找不到待结算的商品"><ButtonLink to={cartIds.length ? '/cart' : '/shop'}>{cartIds.length ? '返回购物袋' : '返回商城'}</ButtonLink></EmptyState></main>;
   return <main className="page-shell">
     <PageIntro title="确认订单" description="提交前确认收货信息和定制内容。" />
     <div className="checkout-layout">
       <section className="form-surface"><h2>收货信息</h2><Feedback error={place.error} />
-        <Form layout="vertical" onFinish={values => place.mutate(values)}>
+        <Form layout="vertical" onFinish={address => {
+          if (quoted && quote.data && !place.isPending) place.mutate({ address, expectedTotalCents: quote.data.totalCents });
+        }}>
           <Form.Item label="收货人" name="recipient" rules={[{ required: true, whitespace: true, message: '请输入收货人' }, { max: 60 }]}><Input autoComplete="name" /></Form.Item>
           <Form.Item label="联系电话" name="phone" rules={[{ required: true, whitespace: true, message: '请输入联系电话' }, { max: 32 }]}><Input type="tel" autoComplete="tel" /></Form.Item>
           <Form.Item label="详细地址" name="address" rules={[{ required: true, whitespace: true, message: '请输入详细地址' }, { max: 300 }]}><Input.TextArea rows={3} autoComplete="street-address" /></Form.Item>
-          <Button type="primary" htmlType="submit" loading={place.isPending}>提交订单</Button>
+          <Button type="primary" htmlType="submit" loading={place.isPending} disabled={!quoted}>提交订单</Button>
         </Form>
       </section>
       <aside className="form-surface order-summary"><h2>订单商品</h2>
@@ -100,10 +126,15 @@ export function Checkout() {
           <strong>{item.productName}</strong><p>{item.variantName} · {item.quantity} 件</p>
           {item.customText && <p className="prose">定制文字：{item.customText}</p>}
           {item.customPhotoUrl && <MediaImage src={item.customPhotoUrl} alt="已选定制照片" className="custom-thumbnail" />}
-          <span>{formatPrice(item.priceCents * item.quantity)}</span>
         </div>)}</div>
-        <p className="form-hint">商品价格、运费和发货进度以订单详情为准。</p>
-        <div className="summary-total"><span>商品小计</span><strong>{formatPrice(subtotal)}</strong></div>
+        <Feedback error={quote.error} />
+        {quote.isFetching && <Loading />}
+        {quote.isError && !quote.isFetching && <Button onClick={() => void quote.refetch()}>重新核对金额</Button>}
+        {quoted && quote.data && <>
+          <div className="summary-total"><span>商品小计</span><strong>{formatPrice(quote.data.subtotalCents)}</strong></div>
+          <div className="summary-total"><span>运费</span><strong>{formatPrice(quote.data.shippingCents)}</strong></div>
+          <div className="summary-total"><span>合计</span><strong>{formatPrice(quote.data.totalCents)}</strong></div>
+        </>}
       </aside>
     </div>
   </main>;

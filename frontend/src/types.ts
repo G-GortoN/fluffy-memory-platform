@@ -80,6 +80,13 @@ export interface PurchaseItem {
   customPhotoUrl?: string | null;
 }
 
+export interface DirectCheckout {
+  accountId: number;
+  item: PurchaseItem;
+  productName: string;
+  variantName: string;
+}
+
 export interface CartItem extends PurchaseItem {
   id: number;
   productId: number;

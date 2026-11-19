@@ -41,7 +41,9 @@ final class CommerceModels {
     }
 
     record CheckoutInput(List<Long> cartIds, List<LineInput> items, String recipient, String phone,
-                         String address, String requestId) {}
+                         String address, String requestId, Long expectedTotalCents) {}
+
+    record CheckoutQuote(long subtotalCents, int shippingCents, long totalCents) {}
 
     record RefundInput(String reason) {}
 

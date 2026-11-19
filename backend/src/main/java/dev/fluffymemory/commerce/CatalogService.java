@@ -112,15 +112,18 @@ class CatalogService {
             .orElseThrow(() -> ApiException.notFound("商品规格不存在"));
     }
 
-    Map<Long, SellableVariant> lockVariants(Set<Long> ids) {
-        // Keep publication and price stable until inventory is reserved. Use the
-        // same lock order as product editing, including during multi-product checkout.
-        db.sql("""
-            select p.id from products p
-            where exists (select 1 from product_variants v where v.product_id = p.id and v.id in (:ids))
-            order by p.id for update
-            """).param("ids", ids).query(Long.class).list();
-        List<SellableVariant> variants = db.sql(SELLABLE + " where v.id in (:ids) order by v.id for update of v")
+    Map<Long, SellableVariant> checkoutVariants(Set<Long> ids, boolean lock) {
+        String query = SELLABLE + " where v.id in (:ids) order by v.id";
+        if (lock) {
+            // Keep publication and price stable until reservation, using the same lock order as product edits.
+            db.sql("""
+                select p.id from products p
+                where exists (select 1 from product_variants v where v.product_id = p.id and v.id in (:ids))
+                order by p.id for update
+                """).param("ids", ids).query(Long.class).list();
+            query += " for update of v";
+        }
+        List<SellableVariant> variants = db.sql(query)
             .param("ids", ids).query(SellableVariant.class).list();
         if (variants.size() != ids.size()) {
             throw ApiException.notFound("存在无效的商品规格");
