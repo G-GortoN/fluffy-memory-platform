@@ -4,9 +4,9 @@
 
 Fluffy Memory 結合寵物護理、紀念及網上購物。你可以記錄寵物的日常，珍藏相伴的時光，亦可選購寵物用品及訂製紀念品。
 
-**[開啟香港繁體中文公開主頁](https://fluffy-memory.tail0fcefb.ts.net/?lang=zh-HK)**
+**[公開主頁](https://fluffy-memory.tail0fcefb.ts.net/?lang=zh-HK)** · **[管理後台](https://fluffy-memory.tail0fcefb.ts.net/admin?lang=zh-HK)**
 
-網站提供英文、簡體中文及香港繁體中文。你可以在導覽列切換語言，網站會記住上次的選擇。網上示範採用模擬付款。
+網站提供英文、簡體中文及香港繁體中文。你可以在導覽列切換語言，網站會記住上次的選擇。網上示範採用模擬付款。管理後台須使用管理員帳戶登入。
 
 ## 主要功能
 

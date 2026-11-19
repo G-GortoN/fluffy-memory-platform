@@ -4,9 +4,9 @@
 
 Fluffy Memory 是一个集宠物照护、纪念和购物于一体的平台。用户可以记录宠物的日常，珍藏一起度过的时光，并选购宠物用品和定制纪念品。
 
-**[打开简体中文公网首页](https://fluffy-memory.tail0fcefb.ts.net/?lang=zh-CN)**
+**[公网首页](https://fluffy-memory.tail0fcefb.ts.net/?lang=zh-CN)** · **[运营后台](https://fluffy-memory.tail0fcefb.ts.net/admin?lang=zh-CN)**
 
-网站支持英文、简体中文和香港繁体中文，在导航栏可随时切换，并记住上次选择。线上演示使用模拟支付。
+网站支持英文、简体中文和香港繁体中文，在导航栏可随时切换，并记住上次选择。线上演示使用模拟支付。访问运营后台需要管理员账号。
 
 ## 主要功能
 

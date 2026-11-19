@@ -4,9 +4,9 @@
 
 Fluffy Memory is a place to care for your pets, keep their memories close, and shop for everyday essentials and personalised keepsakes.
 
-**[Open the live homepage in English](https://fluffy-memory.tail0fcefb.ts.net/?lang=en)**
+**[Live homepage](https://fluffy-memory.tail0fcefb.ts.net/?lang=en)** · **[Admin dashboard](https://fluffy-memory.tail0fcefb.ts.net/admin?lang=en)**
 
-The site supports English, Simplified Chinese, and Hong Kong Traditional Chinese. Change the language from the navigation bar. The site remembers your choice. Payments on the live demo are simulated.
+The site supports English, Simplified Chinese, and Hong Kong Traditional Chinese. Change the language from the navigation bar. The site remembers your choice. Payments on the live demo are simulated. The dashboard requires an administrator account.
 
 ## What you can do
 
